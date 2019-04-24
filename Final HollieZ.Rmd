@@ -1,0 +1,254 @@
+---
+title: "Final Project--- Finding the factors could trigger the suicide"
+author: "Hollie"
+date: "3/26/2019"
+output: html_document
+---
+
+
+```{r}
+# Packages need to be installed
+# install packages
+
+# Packages for logistic Regressional Model
+install.packages("DescTools")
+install.packages("lmtest")
+library(tidyverse)
+library(car)
+library(DescTools)
+library(lmtest) #for LR test
+
+```
+
+```{r setup, include=FALSE}
+
+# Load the data
+Suv_2017 = read.csv(file = "2017XXHq_part 1.csv", header = TRUE, sep = ",")
+# Choose the included variables
+keeps = c("raceeth","q1", "q2", "q3","q5", "q20", "q21", "q22", "q23", "q24","q25",
+          "q26", "q27", "q28", "q29", "q67","q79", "q88", "q89")
+Suv_2017_r = Suv_2017[keeps]
+
+```
+
+```{r}
+
+# Rename the variables
+names(Suv_2017_r) = c("Race_Com","Age", "Sex", "Grades_inSchool","Race", "SexHarass_rand", "SexHarass_part","Physically_vio", "Bully_onCamp","Bully_elec","Low_mood", "Consider_sui","Plan_sui","Times_toSui", "Injury_cond", "Sex_ID","Activities_day","Hour_sleep","School_perform")
+head(Suv_2017_r)
+
+```
+
+
+
+
+
+```{r}
+## Recode the variables
+
+# SEX [Factor]
+class(Suv_2017_r$Sex)
+as.factor(Suv_2017_r$Sex)
+Suv_2017_r$Sex_bin[Suv_2017_r$Sex == "1"] = 0  #female
+Suv_2017_r$Sex_bin[Suv_2017_r$Sex == "2"] = 1   # male
+
+# Race [Factor]
+# Change the race variable to the "factor" type 
+class(Suv_2017_r$Race_Com)
+as.factor(Suv_2017_r$Race_Com)
+Suv_2017_r$Race_Com = factor(Suv_2017_r$Race_Com,
+levels = c(1,2,3,4,5,6,7,8),
+labels = c("AmericanIndian/Alaska Native", "Asian", "Black", "Native Hawaiian/Other 
+           Pacific", "White", 
+           "Hispanic/Latino","Multiple--Hispanic/Latino",
+           "Multiple--Non-Hispanic/Latino"))
+
+# Age [Numeric]
+class(Suv_2017_r$Age)
+Suv_2017_r$Age = as.numeric(as.factor(Suv_2017_r$Age))
+
+
+
+# Sexual Harrassment from Stranger [Factor]
+class(Suv_2017_r$SexHarass_rand)
+as.factor(Suv_2017_r$SexHarass_rand)
+Suv_2017_r$SexHarass_rand_bin[Suv_2017_r$SexHarass_rand == "1"] = 0
+Suv_2017_r$SexHarass_rand_bin[Suv_2017_r$SexHarass_rand == "2" | 
+                                Suv_2017_r$SexHarass_rand == "3" |  
+                                Suv_2017_r$SexHarass_rand == "4" | 
+                                Suv_2017_r$SexHarass_rand == "5" ] = 1
+
+# Sexual Harrassment from the person they are dating  [Factor]
+class(Suv_2017_r$SexHarass_part)
+as.factor(Suv_2017_r$SexHarass_part)
+Suv_2017_r$SexHarass_part_bin[Suv_2017_r$SexHarass_part == "1" |
+                                Suv_2017_r$SexHarass_part == "2" ] = 0
+Suv_2017_r$SexHarass_part_bin[Suv_2017_r$SexHarass_part == "3" |  
+                                Suv_2017_r$SexHarass_part == "4" | 
+                                Suv_2017_r$SexHarass_part == "5" |
+                                Suv_2017_r$SexHarass_part == "6" ] = 1
+
+# Sexual Hassrassment Experience (Combine both experience to see whether the interviewees ever had the experience) [Factor] [Could be the exposurer ]
+####-----#### 
+Suv_2017_r$SexHars_bin[Suv_2017_r$SexHarass_part_bin == "1" |
+                       Suv_2017_r$SexHarass_rand_bin == "1"] = 1
+Suv_2017_r$SexHars_bin[Suv_2017_r$SexHarass_part_bin == "0" & 
+                       Suv_2017_r$SexHarass_rand_bin == "0"] = 0
+
+# Low Mood [Factor] [Exposurer]
+class(Suv_2017_r$Low_mood)
+as.factor(Suv_2017_r$Low_mood)
+Suv_2017_r$Low_mood_bin[Suv_2017_r$Low_mood == "1"] = 1
+Suv_2017_r$Low_mood_bin[Suv_2017_r$Low_mood == "2"] = 0
+
+# Exercise Route [Numeric] 
+# I treat it as numeric here so that to see whether more exercise would help decrease the possibility of attempting suicide 
+class(Suv_2017_r$Activities_day)
+Suv_2017_r$Activities_day = as.numeric(as.factor(Suv_2017_r$Activities_day))
+
+# Bullying [Factor]
+Suv_2017_r$bullying[Suv_2017_r$Bully_onCamp == "1" | Suv_2017_r$Bully_elec == "1"] = 1
+Suv_2017_r$bullying[Suv_2017_r$Bully_onCamp == "2" & Suv_2017_r$Bully_elec == "2"] = 0
+Suv_2017_r$bullying = factor(Suv_2017_r$bullying,
+levels = c(1,0),
+labels = c("Been bullied", "Not been bullied"))
+
+# Hour of sleep (whether numeric or factor?)
+class(Suv_2017_r$Hour_sleep)
+as.factor(Suv_2017_r$Hour_sleep)
+
+ # make the sleep hours become binaray 
+  #Sleeping hour less than 8 hours per day
+Suv_2017_r$Hour_Sleep_bin[Suv_2017_r$Hour_sleep == "1"| 
+                            Suv_2017_r$Hour_sleep == "2"|
+                            Suv_2017_r$Hour_sleep == "3"|
+                            Suv_2017_r$Hour_sleep == "4"] = 1
+ #Sleeping hour less than 8 hours per day
+Suv_2017_r$Hour_Sleep_bin[Suv_2017_r$Hour_sleep == "5" | 
+                                Suv_2017_r$Hour_sleep == "6" |  
+                                Suv_2017_r$Hour_sleep == "7" ] = 0
+
+# Sex Identity
+Suv_2017_r$Sex_ID[Suv_2017_r$Sex_ID == "1"] = "Straight"
+Suv_2017_r$Sex_ID[Suv_2017_r$Sex_ID == "2" |Suv_2017_r$Sex_ID == "3"
+                  |Suv_2017_r$Sex_ID == "4" ] = "LGBTQ"
+                           
+# Suicide Attempted [Factor] [Outcome Variable]
+
+class(Suv_2017_r$Consider_sui)
+as.factor(Suv_2017_r$Consider_sui)
+Suv_2017_r$Attempted_sui_bin[Suv_2017_r$Consider_sui == "1" |
+                              Suv_2017_r$Plan_sui == "1"] = 1
+Suv_2017_r$Attempted_sui_bin[Suv_2017_r$Consider_sui == "2" &
+                              Suv_2017_r$Consider_sui == "2"] = 0
+
+```
+
+```{r}
+# Visualization
+
+
+Suv_2017_r$Attempted_sui_bin<- as.factor(Suv_2017_r$Attempted_sui_bin)
+
+#Drop NA's from Attempted Suicide binary and Age variables and then plot the boxplots
+Suv_2017_r %>%
+  drop_na(c(Attempted_sui_bin, Age)) %>%
+ggplot(aes(x = Attempted_sui_bin, y = Age)) +
+  geom_boxplot(aes(fill = Attempted_sui_bin)) +
+  labs(x = "Attempted Suicide Status (1 = 'YES')", y = "Age (from -12 years old to 18+)") +
+  theme_bw()
+
+Suv_2017_r %>%
+  drop_na(c(Attempted_sui_bin, Grades_inSchool)) %>%
+ggplot(aes(x = Attempted_sui_bin, y = Grades_inSchool)) +
+  geom_boxplot(aes(fill = Attempted_sui_bin)) +
+  labs(x = "Attempted Suicide Status (1 = 'YES')", y = "Grade in school (from 9th to 12th then undergrad)") +
+  theme_bw()
+
+# Use the table fuction to summary
+table(Suv_2017_r$Attempted_sui_bin,Suv_2017_r$Low_mood_bin)
+table(Suv_2017_r$Attempted_sui_bin,Suv_2017_r$Race_Com)
+table(Suv_2017_r$Attempted_sui_bin,Suv_2017_r$bullying)
+table(Suv_2017_r$Attempted_sui_bin,Suv_2017_r$School_perform)
+table(Suv_2017_r$Attempted_sui_bin,Suv_2017_r$Sex_ID)
+```
+
+```{r}
+#Since the predictor and outcome are both categorical type, we skip the linearity test and jump into testing  Influencer
+
+Logistic_LowMood = glm(Attempted_sui_bin ~ Low_mood_bin, 
+                         data = Suv_2017_r, family = "binomial")
+  plot(Logistic_LowMood, which=4, id.n=5, col="red") 
+```
+
+
+
+```{r}
+# Build the Logistic Model [only the exposurer case]
+LowMood_Logit = glm(Attempted_sui_bin ~ Low_mood_bin , data=Suv_2017_r, family="binomial")
+summary(LowMood_Logit)
+#calculate and print ORs and 95% CIs  
+  OR_LowMood<-exp(cbind(OR = coef(LowMood_Logit), confint(LowMood_Logit))) #calculate ORs and 95% CIs
+  OR_LowMood #print ORs and 95% CIs
+  
+# Build the Logistic Model
+SexHars_Logit = glm(Attempted_sui_bin ~ SexHars_bin , data=Suv_2017_r, family="binomial")
+summary(SexHars_Logit)
+#calculate and print ORs and 95% CIs  
+  OR_SexHars<-exp(cbind(OR = coef(SexHars_Logit), confint(SexHars_Logit))) #calculate ORs and 95% CIs
+  OR_SexHars #print ORs and 95% CIs
+  
+```
+
+```{r}
+# Build the Logistic Model [added in confounder]
+LowMood_Logit2 = glm(Attempted_sui_bin ~ Low_mood_bin + 
+                       as.numeric(Hour_sleep)+as.numeric(Activities_day), 
+                     data=Suv_2017_r, family="binomial")
+summary(LowMood_Logit2)
+#calculate and print ORs and 95% CIs  
+  OR_LowMood2<-exp(cbind(OR = coef(LowMood_Logit2), confint(LowMood_Logit2))) #calculate ORs and 95% CIs
+  OR_LowMood2 #print ORs and 95% CIs
+
+# Build the Logistic Model [added in confounder, with sex_harass experience]
+LowMood_Logit3 = glm(Attempted_sui_bin ~ Low_mood_bin + 
+                       as.numeric(Hour_sleep)+as.numeric(Activities_day) + 
+                       as.factor(SexHars_bin), 
+                     data=Suv_2017_r, family="binomial")
+summary(LowMood_Logit3)
+#calculate and print ORs and 95% CIs  
+  OR_LowMood3<-exp(cbind(OR = coef(LowMood_Logit3), confint(LowMood_Logit3))) #calculate ORs and 95% CIs
+  OR_LowMood3 #print ORs and 95% CIs
+  
+# Build the Logistic Model
+SexHars_Logit2 = glm(Attempted_sui_bin ~ SexHars_bin + as.factor(Race_Com) + as.factor(Sex_bin), data=Suv_2017_r, family="binomial")
+summary(SexHars_Logit2)
+#calculate and print ORs and 95% CIs  
+  OR_SexHars2<-exp(cbind(OR = coef(SexHars_Logit2), confint(SexHars_Logit2))) #calculate ORs and 95% CIs
+  OR_SexHars2 #print ORs and 95% CIs
+```
+
+```{r}
+# Sensitivity & Specifically
+
+xt_lowMood2 <- addmargins(table(round(predict(LowMood_Logit2, type="response")), LowMood_Logit2$model$Low_mood_bin))
+xt_lowMood2 
+Sen_LM2 = 881/3671
+Sen_LM2
+Spe_LM2 = 7862/7862
+Spe_LM2
+
+xt_lowMood3 <- addmargins(table(round(predict(LowMood_Logit3, type="response")), LowMood_Logit3$model$Low_mood_bin))
+xt_lowMood3 
+Sen_LM3 = 858/3406
+Sen_LM3
+Spe_LM3 = 7447/7447
+Spe_LM3
+
+xt_SexHaras2 <- addmargins(table(round(predict(SexHars_Logit2, type="response")), SexHars_Logit2$model$SexHars_bin))
+xt_SexHaras2 
+Sen_SH2 = 86/1349
+Sen_SH2
+Spe_SH2 = 12007/12007
+Spe_SH2
+```
